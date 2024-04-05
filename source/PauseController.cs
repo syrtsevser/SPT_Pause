@@ -5,7 +5,6 @@ using Comfort.Common;
 using System;
 using System.Reflection;
 using System.Collections;
-using System.Linq;
 using System.Collections.Generic;
 
 
@@ -54,9 +53,6 @@ namespace Pause
         {
             if (IsGameReady())
             {
-                // this feels slow and doesn't work if you are pressing other keys
-                //if (Plugin.TogglePause.Value.IsDown()) 
-
                 // this will break if user assigns a modifier key, but you wouldn't do that would you?
                 if (Input.GetKeyDown(Plugin.TogglePause.Value.MainKey))
                 {
@@ -92,11 +88,7 @@ namespace Pause
 
         private IEnumerable<Player> GetPlayers()
         {
-            #if TARKOV_358
-                return _gameWorld.AllPlayers;
-            #else
-                return _gameWorld.AllPlayersEverExisted;
-            #endif
+            return _gameWorld.AllPlayersEverExisted;
         }
 
         private void SetBonesActive(Player player, bool active)
@@ -105,22 +97,17 @@ namespace Pause
 
             foreach(var r in rigidBodies)
             {
-                //if (_targetBones.Any(i => r.name.ToLower().Contains(i)))
+                Plugin.Log.LogInfo("Found rigidbody: " + r?.name);
+                r.velocity = Vector3.zero;
+                r.angularVelocity = Vector3.zero;
+
+                if (active)
                 {
-                    Plugin.Log.LogInfo("Found rigidbody: " + r?.name);
-                    r.velocity = Vector3.zero;
-                    r.angularVelocity = Vector3.zero;
-                    // toggling isKinematic may be leading to other
-                    // hit detection problems, or at least it seems like
-                    //r.isKinematic = !active;
-                    if (active)
-                    {
-                        r.Sleep();
-                    }
-                    else 
-                    {
-                        r.WakeUp();
-                    }
+                    r.Sleep();
+                }
+                else 
+                {
+                    r.WakeUp();
                 }
             }
 
@@ -132,9 +119,6 @@ namespace Pause
     
                 weapRigidBody.angularVelocity = Vector3.zero;
                 weapRigidBody.velocity = Vector3.zero;
-                //weapRigidBody.isKinematic = !active;
-                // I feel like sleeping the weapon always may be best?
-                // Weird shit is happening
                 weapRigidBody.Sleep();
 
             }
@@ -165,22 +149,6 @@ namespace Pause
                 
                 SetBonesActive(player, false);
                 player.gameObject.SetActive(false);
-
-                // deactivating hands controller game object seems to freeze ragdolls permanently
-                //player.HandsController?.ControllerGameObject?.SetActive(false);
-
-                // if (Plugin.UseAlternatePause.Value)
-                // {
-                //     Plugin.Log.LogInfo("Using alternate pause");
-                    
-                //     player.gameObject.SetActive(false);
-                //     player.HandsController?.ControllerGameObject?.SetActive(false);
-                // }
-                // else 
-                // {
-                //     // get rigid bodies in parent
-                //     SetBonesActive(player, false);
-                // }
             }
 
             ShowTimer();
@@ -211,20 +179,6 @@ namespace Pause
 
                 player.gameObject.SetActive(true);
                 SetBonesActive(player, true);
-                //player.HandsController?.ControllerGameObject?.SetActive(true);
-
-                // if (Plugin.UseAlternatePause.Value)
-                // {
-                //     Plugin.Log.LogInfo("Using alternate pause");
-
-                //     player.gameObject?.SetActive(true);
-                //     player.HandsController?.ControllerGameObject?.SetActive(true);
-                // }
-                // else 
-                // {
-                //     // get rigid bodies in parent
-                //     SetBonesActive(player, true);
-                // }
             }
 
             StartCoroutine(CoHideTimer());

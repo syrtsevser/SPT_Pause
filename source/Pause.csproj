@@ -1,9 +1,9 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
     <AssemblyName>Epi-Pause</AssemblyName>
-    <Version>1.0.3</Version>
+    <Version>1.0.6</Version>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
@@ -12,8 +12,7 @@
 
   <PropertyGroup>
     <!-- folder switch -->
-    <DepsPath>..\dependencies\3.7.1</DepsPath>
-    <DepsPath Condition="$(Configuration) == 'TARKOV_358'">..\dependencies\3.5.8</DepsPath>
+    <DepsPath>..\dependencies</DepsPath>
   </PropertyGroup>
 
   <ItemGroup>
@@ -49,7 +48,7 @@
       <HintPath>$(DepsPath)\UnityEngine.CoreModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="UnityEngine.CoreModule">
+    <Reference Include="UnityEngine.UI">
       <HintPath>$(DepsPath)\UnityEngine.UI.dll</HintPath>
       <Private>False</Private>
     </Reference>
@@ -57,11 +56,11 @@
       <HintPath>$(DepsPath)\UnityEngine.AudioModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="UnityEngine.AudioModule">
+    <Reference Include="Unity.TextMeshPro">
       <HintPath>$(DepsPath)\Unity.TextMeshPro.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="UnityEngine.AudioModule">
+    <Reference Include="Sirenix.Serialization">
       <HintPath>$(DepsPath)\Sirenix.Serialization.dll</HintPath>
       <Private>False</Private>
     </Reference>
@@ -69,7 +68,7 @@
       <HintPath>$(DepsPath)\UnityEngine.InputLegacyModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="UnityEngine.InputLegacyModule.dll">
+    <Reference Include="UnityEngine.PhysicsModule.dll">
       <HintPath>$(DepsPath)\UnityEngine.PhysicsModule.dll</HintPath>
       <Private>False</Private>
     </Reference>

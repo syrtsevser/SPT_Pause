@@ -2,10 +2,7 @@ using EFT;
 using EFT.UI.BattleTimer;
 using System.Reflection;
 using Aki.Reflection.Patching;
-using System;
-using UnityEngine.UI;
 using TMPro;
-using BepInEx;
 
 namespace Pause
 {
@@ -21,7 +18,7 @@ namespace Pause
             {
                 // invoking the PlayerTick to prevent hand jank
                 typeof(GameWorld)
-                        .GetMethod("PlayerTick", BindingFlags.Instance | BindingFlags.NonPublic)
+                        .GetMethod("PlayerTick", BindingFlags.Instance | BindingFlags.Public)
                         .Invoke(__instance, new object[] { dt });
 
                 return false;
@@ -47,16 +44,6 @@ namespace Pause
             return true;
         }
     }
-
-    // Seems to be removed since 3.7.0
-    // public class ActiveHealthControllerClassPatch : ModulePatch 
-    // {
-    //     protected override MethodBase GetTargetMethod() => typeof(ActiveHealthControllerClass).GetMethod("ManualUpdate", BindingFlags.Instance | BindingFlags.Public);
-
-    //     [PatchPrefix]
-    //     // prevents health, hydration, energy updates
-    //     static bool Prefix() => !PauseController.isPaused;
-    // }
 
     public class GameTimerClassPatch : ModulePatch
     {
