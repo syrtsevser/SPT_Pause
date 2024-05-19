@@ -37,12 +37,7 @@ namespace Pause
         // it looks like this just calls the player's update ticks
         internal static bool Prefix(GameWorld __instance)
         {
-            if (PauseController.IsPaused)
-            {
-                return false;
-            }
-
-            return true;
+            return !PauseController.IsPaused;
         }
     }
 
