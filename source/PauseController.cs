@@ -6,149 +6,87 @@ using System;
 using System.Reflection;
 using System.Collections;
 using System.Collections.Generic;
-
+using BepInEx;
+using BepInEx.Configuration;
+using BepInEx.Logging;
+using System.Linq;
 
 namespace Pause
 {
     public class PauseController : MonoBehaviour
     {
-        public static bool isPaused { get; private set; } = false;
-        
-        // track time spent paused
-        private DateTime? pausedDate { get; set; } = null;
-        private DateTime? unpausedDate { get; set; } = null;
+        internal static bool IsPaused { get; private set; } = false;
 
-        // used to determine if game is in the right state to be able to pause
-        private GameWorld _gameWorld;
-        private Player _player;
-        private GamePlayerOwner _gamePlayerOwner;
+        private DateTime? _pausedDate;
+        private DateTime? _unpausedDate;
 
-        // GameTimerClass controls actual raid time
+        private static GameWorld _gameWorld;
+        private static Player _mainPlayer;
+
         private GameTimerClass _gameTimerClass;
-        // MainTimerPanel controls on screen raid time
         private MainTimerPanel _mainTimerPanel;
-       
-        private static string[] _targetBones = new string[]
-		{
-			"calf",
-			"foot",
-			"toe",
-			"spine2",
-			"spine3",
-			"forearm",
-			"neck"
-		};
+        private AbstractGame _abstractGame;
 
-        private TimeSpan GetTimePaused()
+        internal static ManualLogSource Logger;
+
+        private static readonly string[] TargetBones =
         {
-            if (pausedDate.HasValue && unpausedDate.HasValue)
-            {
-                return unpausedDate.Value - pausedDate.Value;
-            }
+            "calf",
+            "foot",
+            "toe",
+            "spine2",
+            "spine3",
+            "forearm",
+            "neck"
+        };
 
-            return TimeSpan.Zero;
-        }
-
-        void Update()
+        private void Awake()
         {
-            if (IsGameReady())
+            Logger = BepInEx.Logging.Logger.CreateLogSource(nameof(PauseController));
+
+            IsPaused = false;
+            _abstractGame = GameObject.FindObjectOfType<AbstractGame>();
+            _mainTimerPanel = GameObject.FindObjectOfType<MainTimerPanel>();
+            _gameTimerClass = _abstractGame?.GameTimer;
+
+            if (_gameTimerClass == null || _mainTimerPanel == null)
             {
-                // this will break if user assigns a modifier key, but you wouldn't do that would you?
-                if (Input.GetKeyDown(Plugin.TogglePause.Value.MainKey))
-                {
-                    isPaused = !isPaused;
-
-                    // get references to necessary game objects
-                    AbstractGame abstractGame = GameObject.FindObjectOfType<AbstractGame>();
-                    _mainTimerPanel = GameObject.FindObjectOfType<MainTimerPanel>();
-                    _gameTimerClass = abstractGame.GameTimer;
-
-                    Plugin.Log.LogInfo($"MainTimerPanel found: {_mainTimerPanel != null}");
-                    Plugin.Log.LogInfo($"GameTimerClass found: {_gameTimerClass != null}");
-                    Plugin.Log.LogInfo($"Start Time: {_gameTimerClass.StartDateTime.Value.ToString()}");
-                    Plugin.Log.LogInfo($"Escape Time: {_gameTimerClass.EscapeDateTime.Value.ToString()}");
-                    Plugin.Log.LogInfo($"Past Time: {_gameTimerClass.PastTime}");
-
-                    if (isPaused)
-                    {
-                        Pause();
-                    }
-                    else
-                    {
-                        Unpause();
-                    }
-
-                    Plugin.Log.LogInfo($"Game paused: [{isPaused}]");
-                    Plugin.Log.LogInfo($"Start Time: {_gameTimerClass.StartDateTime.Value.ToString()}");
-                    Plugin.Log.LogInfo($"Escape Time: {_gameTimerClass.EscapeDateTime.Value.ToString()}");
-                    Plugin.Log.LogInfo($"Past Time: {_gameTimerClass.PastTime}");
-                }
+                Logger.LogError("Failed to find necessary game components.");
+                enabled = false;
             }
         }
 
-        private IEnumerable<Player> GetPlayers()
+        private void Update()
         {
-            return _gameWorld.AllPlayersEverExisted;
-        }
-
-        private void SetBonesActive(Player player, bool active)
-        {
-            var rigidBodies = player.PlayerBones.GetComponentsInChildren<Rigidbody>();
-
-            foreach(var r in rigidBodies)
+            if (IsKeyPressed(Plugin.TogglePause.Value))
             {
-                Plugin.Log.LogInfo("Found rigidbody: " + r?.name);
-                r.velocity = Vector3.zero;
-                r.angularVelocity = Vector3.zero;
+                IsPaused = !IsPaused;
 
-                if (active)
+                if (IsPaused)
                 {
-                    r.Sleep();
+                    Pause();
                 }
-                else 
+                else
                 {
-                    r.WakeUp();
+                    Unpause();
                 }
-            }
-
-            var weapRigidBody = player.HandsController?.ControllerGameObject?.GetComponent<Rigidbody>();
-
-            if (weapRigidBody != null) 
-            {
-                Plugin.Log.LogInfo("Found weapon rigid body");
-    
-                weapRigidBody.angularVelocity = Vector3.zero;
-                weapRigidBody.velocity = Vector3.zero;
-                weapRigidBody.Sleep();
-
             }
         }
 
         private void Pause()
         {
             Time.timeScale = 0f;
-            pausedDate = DateTime.UtcNow;
+            _pausedDate = DateTime.UtcNow;
 
-            // disable player control
-            _gamePlayerOwner.enabled = false;
+            _mainPlayer.enabled = false;
+            _mainPlayer.PauseAllEffectsOnPlayer();
 
-            var players = GetPlayers();
-
-            // 3.7.0 - experimental: pause effects
-            _gamePlayerOwner.Player.PauseAllEffectsOnPlayer();
-
-            // deactivate all players
-            foreach (var player in players) 
+            foreach (var player in GetPlayers())
             {
-                if (player.IsYourPlayer)
-                {
-                    continue;
-                }
+                if (player.IsYourPlayer) continue;
 
-                Plugin.Log.LogInfo($"Deactivating player: {player?.name}");
-                
-                SetBonesActive(player, false);
-                player.gameObject.SetActive(false);
+                Logger.LogInfo($"Deactivating player: {player?.name}");
+                SetPlayerState(player, false);
             }
 
             ShowTimer();
@@ -157,47 +95,66 @@ namespace Pause
         private void Unpause()
         {
             Time.timeScale = 1f;
-            unpausedDate = DateTime.UtcNow;
+            _unpausedDate = DateTime.UtcNow;
 
-            // enable player control
-            _gamePlayerOwner.enabled = true;
+            _mainPlayer.enabled = true;
+            _mainPlayer.UnpauseAllEffectsOnPlayer();
 
-            // 3.7.0 - experimental: unpause effects
-            _gamePlayerOwner.Player.UnpauseAllEffectsOnPlayer();
-
-            // reactivate all players
-            var players = GetPlayers();
-
-            foreach (var player in players) 
+            foreach (var player in GetPlayers())
             {
-                if (player.IsYourPlayer) 
-                {
-                    continue;
-                }
-                
-                Plugin.Log.LogInfo($"Reactivating player: {player?.name}");
+                if (player.IsYourPlayer) continue;
 
-                player.gameObject.SetActive(true);
-                SetBonesActive(player, true);
+                Logger.LogInfo($"Reactivating player: {player?.name}");
+                SetPlayerState(player, true);
             }
 
             StartCoroutine(CoHideTimer());
 
-            // get timespan spent paused
-            var timePaused = GetTimePaused();
-
-            // add time back to timers
             UpdateTimers(GetTimePaused());
+        }
 
-            Plugin.Log.LogInfo($"Time spent paused: {timePaused}");
+        private IEnumerable<Player> GetPlayers() => _gameWorld?.AllAlivePlayersList ?? new List<Player>();
+
+        private void SetPlayerState(Player player, bool active)
+        {
+            foreach (var r in player.PlayerBones.GetComponentsInChildren<Rigidbody>())
+            {
+                r.velocity = Vector3.zero;
+                r.angularVelocity = Vector3.zero;
+
+                if (active)
+                {
+                    r.WakeUp();
+                }
+                else
+                {
+                    r.Sleep();
+                }
+            }
+
+            var weaponRigidBody = player.HandsController?.ControllerGameObject?.GetComponent<Rigidbody>();
+            if (weaponRigidBody != null)
+            {
+                weaponRigidBody.angularVelocity = Vector3.zero;
+                weaponRigidBody.velocity = Vector3.zero;
+                weaponRigidBody.Sleep();
+            }
+
+            if (!active)
+            {
+                player.AIData.BotOwner.DecisionQueue.Clear();
+                player.gameObject.SetActive(false);
+            }
+            else
+            {
+                player.gameObject.SetActive(true);
+                player.AIData.BotOwner.CalcGoal();
+            }
         }
 
         private void ShowTimer()
         {
-            if (_mainTimerPanel != null)
-            {
-                _mainTimerPanel.DisplayTimer();
-            }
+            _mainTimerPanel?.DisplayTimer();
         }
 
         private IEnumerator CoHideTimer()
@@ -209,82 +166,51 @@ namespace Pause
             }
         }
 
+        private TimeSpan GetTimePaused() => (_pausedDate.HasValue && _unpausedDate.HasValue) ? _unpausedDate.Value - _pausedDate.Value : TimeSpan.Zero;
+
         private void UpdateTimers(TimeSpan timePaused)
         {
-            // GameTimerClass controls the overall game state
-            // If PastTime > SessionTime game ends
-            // PastTime is calculated based on nullable_0
-            var startTime = typeof(GameTimerClass).GetField("nullable_0", BindingFlags.Instance | BindingFlags.NonPublic);
-            var escapeTime = typeof(GameTimerClass).GetField("nullable_1", BindingFlags.Instance | BindingFlags.NonPublic);
+            var startTimeField = typeof(GameTimerClass).GetField("nullable_0", BindingFlags.Instance | BindingFlags.NonPublic);
+            var escapeTimeField = typeof(GameTimerClass).GetField("nullable_1", BindingFlags.Instance | BindingFlags.NonPublic);
+            var timerPanelField = typeof(TimerPanel).GetField("dateTime_0", BindingFlags.Instance | BindingFlags.NonPublic);
+            var gameDateTimeField = typeof(GameDateTime).GetField("_realtimeSinceStartup", BindingFlags.Instance | BindingFlags.NonPublic);
 
+            if (startTimeField == null || escapeTimeField == null || timerPanelField == null || gameDateTimeField == null)
+            {
+                Logger.LogError("Failed to retrieve necessary fields via reflection.");
+                return;
+            }
 
-            // MainTimerPanel is the in-game ui clock, which operates separately
-            // from the timer in GameTimerClass
-            // needs to be cast as a TimerPanel
-            // dateTime_0 seems to be escape date
-            // works opposite of GameTimerClass which depends on start date
-            var fi2 = typeof(TimerPanel).GetField("dateTime_0", BindingFlags.Instance | BindingFlags.NonPublic);
+            var startDate = startTimeField.GetValue(_gameTimerClass) as DateTime?;
+            var escapeDate = timerPanelField.GetValue(_mainTimerPanel) as DateTime?;
+            var realTimeSinceStartup = (float)gameDateTimeField.GetValue(_gameWorld.GameDateTime);
 
-            // GameTimeClass seems to control the time of day
-            // _realTimeSinceStartup is the realTimeSinceStartup at the beginning of the game
-            var fi3 = typeof(GameDateTime).GetField("_realtimeSinceStartup", BindingFlags.Instance | BindingFlags.NonPublic);
-
-            // get the underlying start date value from GameTimerClass nullable_0 private field
-            var startDate = startTime.GetValue(_gameTimerClass) as DateTime?;
-            
-            // get the underlying escape date value from TimerPanel dateTime_0 private field
-            var escapeDate = fi2.GetValue(_mainTimerPanel) as DateTime?;
-            
-            // get the current realTimeSinceStartup of the GameTimeClass from float_1
-            var realTimeSinceStartup = (float)fi3.GetValue(_gameWorld.GameDateTime);
-
-            // add the time spent paused to the underlying start date 
-            startTime.SetValue(_gameTimerClass, startDate.Value.Add(timePaused));
-            escapeTime.SetValue(_gameTimerClass, escapeDate.Value.Add(timePaused));
-
-            // add the time spent paused 
-            fi2.SetValue(_mainTimerPanel, escapeDate.Value.Add(timePaused));
-
-            // add the time spend paused (in seconds)
-            // todo: changed in 3.7.0
-            fi3.SetValue(_gameWorld.GameDateTime, realTimeSinceStartup + (float)timePaused.TotalSeconds);
+            if (startDate.HasValue && escapeDate.HasValue)
+            {
+                startTimeField.SetValue(_gameTimerClass, startDate.Value.Add(timePaused));
+                escapeTimeField.SetValue(_gameTimerClass, escapeDate.Value.Add(timePaused));
+                timerPanelField.SetValue(_mainTimerPanel, escapeDate.Value.Add(timePaused));
+                gameDateTimeField.SetValue(_gameWorld.GameDateTime, realTimeSinceStartup + (float)timePaused.TotalSeconds);
+            }
         }
 
-        bool IsGameReady()
+        internal static void Enable()
         {
-            if (_gameWorld == null)
+            if (Singleton<IBotGame>.Instantiated)
             {
                 _gameWorld = Singleton<GameWorld>.Instance;
-                return false;
+                _gameWorld.GetOrAddComponent<PauseController>();
+                _mainPlayer = _gameWorld.MainPlayer;
+                Logger.LogDebug("PauseController enabled.");
             }
-            else if (_player == null)
-            {
-                _player = _gameWorld.MainPlayer;
-                return false;
-            }
-            else if (_gamePlayerOwner == null)
-            {
-                _gamePlayerOwner = _player.GetComponent<GamePlayerOwner>();
-                return false;
-            }
-            else if (_gamePlayerOwner is HideoutPlayerOwner)
-            {
-                // disable pause when in the hideout
-                return false;
-            }
-            else if (_gamePlayerOwner != null)
-            {
-                var fi = typeof(PlayerOwner).GetProperty("State", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-                var state = (int)fi.GetValue(_gamePlayerOwner);
-
-                // 1 = Started
-                if (state == 1)
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
+
+        internal static bool IsKeyPressed(KeyboardShortcut key)
+        {
+            if (!UnityInput.Current.GetKeyDown(key.MainKey)) return false;
+            return key.Modifiers.All(modifier => UnityInput.Current.GetKey(modifier));
+        }
+
+        internal static bool IsKeyPressed(KeyCode key) => UnityInput.Current.GetKeyDown(key);
     }
 }

@@ -14,7 +14,7 @@ namespace Pause
         // various world ticks
         static bool Prefix(GameWorld __instance, float dt)
         {
-            if (PauseController.isPaused) 
+            if (PauseController.IsPaused) 
             {
                 // invoking the PlayerTick to prevent hand jank
                 typeof(GameWorld)
@@ -36,7 +36,7 @@ namespace Pause
         // it looks like this just calls the player's update ticks
         static bool Prefix(GameWorld __instance) 
         {
-            if (PauseController.isPaused) 
+            if (PauseController.IsPaused) 
             {
                 return false;
             }
@@ -53,7 +53,7 @@ namespace Pause
         static bool Prefix() 
         {
             // this seems to be the real raid timer
-            if (PauseController.isPaused) 
+            if (PauseController.IsPaused) 
             {
                 return false;
             }
@@ -71,7 +71,7 @@ namespace Pause
         {
             // patch for 'fake' gaame ui timer when you press o
             // set the text to PAUSED for fun
-            if (PauseController.isPaused) 
+            if (PauseController.IsPaused) 
             {
                 ____timerText.SetMonospaceText("PAUSED", false);
                 return false;
