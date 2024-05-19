@@ -22,10 +22,19 @@ namespace Pause
             Logger.LogInfo($"PAUSE: Loading");
 
             new NewGamePatch().Enable();    
+
+            //Tick Patches
             new WorldTickPatch().Enable();
             new OtherWorldTickPatch().Enable();
-            new GameTimerClassPatch().Enable();
+            new GameTimerClassUpdatePatch().Enable();
             new TimerPanelPatch().Enable();
+            new PlayerUpdatePatch().Enable();
+            new EndByTimerScenarioUpdatePatch().Enable();
+
+            //Base Local Game Patches
+           // new BaseLocalGameUpdatePatch().Enable();
+            //new BaseLocalGameStopPatch().Enable();
+            //new BaseLocalGameStopSessionPatch().Enable();
         }
 
         internal class NewGamePatch : ModulePatch

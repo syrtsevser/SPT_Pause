@@ -1,20 +1,21 @@
-using EFT;
-using EFT.UI.BattleTimer;
 using System.Reflection;
 using Aki.Reflection.Patching;
+using EFT;
+using EFT.UI.BattleTimer;
+using HarmonyLib;
 using TMPro;
 
 namespace Pause
 {
     public class WorldTickPatch : ModulePatch
     {
-        protected override MethodBase GetTargetMethod() => typeof(GameWorld).GetMethod("DoWorldTick", BindingFlags.Instance | BindingFlags.Public);
+        protected override MethodBase GetTargetMethod() => AccessTools.Method(typeof(GameWorld), nameof(GameWorld.DoWorldTick));
 
         [PatchPrefix]
         // various world ticks
-        static bool Prefix(GameWorld __instance, float dt)
+        internal static bool Prefix(GameWorld __instance, float dt)
         {
-            if (PauseController.IsPaused) 
+            if (PauseController.IsPaused)
             {
                 // invoking the PlayerTick to prevent hand jank
                 typeof(GameWorld)
@@ -30,13 +31,13 @@ namespace Pause
 
     public class OtherWorldTickPatch : ModulePatch
     {
-        protected override MethodBase GetTargetMethod() => typeof(GameWorld).GetMethod("DoOtherWorldTick", BindingFlags.Instance | BindingFlags.Public);
+        protected override MethodBase GetTargetMethod() => AccessTools.Method(typeof(GameWorld), nameof(GameWorld.DoOtherWorldTick));
 
         [PatchPrefix]
         // it looks like this just calls the player's update ticks
-        static bool Prefix(GameWorld __instance) 
+        internal static bool Prefix(GameWorld __instance)
         {
-            if (PauseController.IsPaused) 
+            if (PauseController.IsPaused)
             {
                 return false;
             }
@@ -45,39 +46,55 @@ namespace Pause
         }
     }
 
-    public class GameTimerClassPatch : ModulePatch
+    public class GameTimerClassUpdatePatch : ModulePatch
     {
-        protected override MethodBase GetTargetMethod() => typeof(GameTimerClass).GetMethod("method_0", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+        protected override MethodBase GetTargetMethod() => AccessTools.Method(typeof(GameTimerClass), nameof(GameTimerClass.method_0));
 
         [PatchPrefix]
-        static bool Prefix() 
+        internal static bool Prefix()
         {
-            // this seems to be the real raid timer
-            if (PauseController.IsPaused) 
-            {
-                return false;
-            }
-
-            return true;
-        } 
+            return !PauseController.IsPaused;
+        }
     }
 
     public class TimerPanelPatch : ModulePatch
     {
-        protected override MethodBase GetTargetMethod() => typeof(TimerPanel).GetMethod("UpdateTimer", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        protected override MethodBase GetTargetMethod() => AccessTools.Method(typeof(TimerPanel), nameof(TimerPanel.UpdateTimer));
 
         [PatchPrefix]
-        static bool Prefix(TextMeshProUGUI ____timerText)
+        internal static bool Prefix(TextMeshProUGUI ____timerText)
         {
             // patch for 'fake' gaame ui timer when you press o
             // set the text to PAUSED for fun
-            if (PauseController.IsPaused) 
+            if (PauseController.IsPaused)
             {
                 ____timerText.SetMonospaceText("PAUSED", false);
                 return false;
             }
-            
+
             return true;
         }
     }
+    public class PlayerUpdatePatch : ModulePatch
+    {
+        protected override MethodBase GetTargetMethod() => AccessTools.Method(typeof(Player), nameof(Player.UpdateTick));
+
+        [PatchPrefix]
+        internal static bool Prefix()
+        {
+            return !PauseController.IsPaused;
+        }
+    }
+
+    public class EndByTimerScenarioUpdatePatch : ModulePatch
+    {
+        protected override MethodBase GetTargetMethod() => AccessTools.Method(typeof(EndByTimerScenario), nameof(EndByTimerScenario.Update));
+
+        [PatchPrefix]
+        internal static bool Prefix()
+        {
+            return !PauseController.IsPaused;
+        }
+    }
+
 }

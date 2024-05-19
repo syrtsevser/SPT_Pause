@@ -1,16 +1,16 @@
-using EFT;
-using EFT.UI.BattleTimer;
-using UnityEngine;
-using Comfort.Common;
 using System;
-using System.Reflection;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
-using System.Linq;
+using Comfort.Common;
+using EFT;
+using EFT.UI.BattleTimer;
 using HarmonyLib;
+using UnityEngine;
 
 namespace Pause
 {
@@ -37,17 +37,6 @@ namespace Pause
 
         internal static ManualLogSource Logger;
 
-        private static readonly string[] TargetBones =
-        {
-            "calf",
-            "foot",
-            "toe",
-            "spine2",
-            "spine3",
-            "forearm",
-            "neck"
-        };
-
         private List<AudioSource> _pausedAudioSources;
 
         private void Awake()
@@ -68,7 +57,6 @@ namespace Pause
 
             _pausedAudioSources = new List<AudioSource>();
         }
-
 
         private void Update()
         {
