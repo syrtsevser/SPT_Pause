@@ -11,7 +11,6 @@ namespace Pause
     [BepInPlugin("com.epi.pause", "PAUSE", "1.1.0")]
     public class Plugin : BaseUnityPlugin
     {
-        const string KeybindSectionName = "Keybinds";
         internal static ConfigEntry<KeyboardShortcut> TogglePause;
         internal static ManualLogSource Log;
 
@@ -19,7 +18,7 @@ namespace Pause
         {
             Log = base.Logger;
 
-            TogglePause = Config.Bind(KeybindSectionName, "Toggle Pause", new KeyboardShortcut(KeyCode.F9));
+            TogglePause = Config.Bind("Keybinds", "Toggle Pause", new KeyboardShortcut(KeyCode.F9));
             Logger.LogInfo($"PAUSE: Loading");
 
             new NewGamePatch().Enable();    

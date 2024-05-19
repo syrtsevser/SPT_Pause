@@ -10,6 +10,7 @@ using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using System.Linq;
+using HarmonyLib;
 
 namespace Pause
 {
@@ -27,6 +28,13 @@ namespace Pause
         private MainTimerPanel _mainTimerPanel;
         private AbstractGame _abstractGame;
 
+        private static FieldInfo _mouseLookControlField;
+
+        private static FieldInfo _startTimeField;
+        private static FieldInfo _escapeTimeField;
+        private static FieldInfo _timerPanelField;
+        private static FieldInfo _gameDateTimeField;
+
         internal static ManualLogSource Logger;
 
         private static readonly string[] TargetBones =
@@ -39,6 +47,8 @@ namespace Pause
             "forearm",
             "neck"
         };
+
+        private List<AudioSource> _pausedAudioSources;
 
         private void Awake()
         {
@@ -53,7 +63,30 @@ namespace Pause
             {
                 Logger.LogError("Failed to find necessary game components.");
                 enabled = false;
+                return;
             }
+
+            _mouseLookControlField = AccessTools.Field(typeof(Player), "_mouseLookControl");
+            if (_mouseLookControlField == null)
+            {
+                Logger.LogError("Failed to find _mouseLookControl field.");
+                enabled = false;
+                return;
+            }
+
+            _startTimeField = typeof(GameTimerClass).GetField("nullable_0", BindingFlags.Instance | BindingFlags.NonPublic);
+            _escapeTimeField = typeof(GameTimerClass).GetField("nullable_1", BindingFlags.Instance | BindingFlags.NonPublic);
+            _timerPanelField = typeof(TimerPanel).GetField("dateTime_0", BindingFlags.Instance | BindingFlags.NonPublic);
+            _gameDateTimeField = typeof(GameDateTime).GetField("_realtimeSinceStartup", BindingFlags.Instance | BindingFlags.NonPublic);
+
+            if (_startTimeField == null || _escapeTimeField == null || _timerPanelField == null || _gameDateTimeField == null)
+            {
+                Logger.LogError("Failed to retrieve necessary fields via reflection.");
+                enabled = false;
+                return;
+            }
+
+            _pausedAudioSources = new List<AudioSource>();
         }
 
         private void Update()
@@ -79,6 +112,7 @@ namespace Pause
             _pausedDate = DateTime.UtcNow;
 
             _mainPlayer.enabled = false;
+            SetMouseLookControl(false);
             _mainPlayer.PauseAllEffectsOnPlayer();
 
             foreach (var player in GetPlayers())
@@ -89,6 +123,7 @@ namespace Pause
                 SetPlayerState(player, false);
             }
 
+            PauseAllAudio();
             ShowTimer();
         }
 
@@ -98,6 +133,7 @@ namespace Pause
             _unpausedDate = DateTime.UtcNow;
 
             _mainPlayer.enabled = true;
+            SetMouseLookControl(true);
             _mainPlayer.UnpauseAllEffectsOnPlayer();
 
             foreach (var player in GetPlayers())
@@ -108,9 +144,40 @@ namespace Pause
                 SetPlayerState(player, true);
             }
 
+            ResumeAllAudio();
             StartCoroutine(CoHideTimer());
 
             UpdateTimers(GetTimePaused());
+        }
+
+        private void SetMouseLookControl(bool enable)
+        {
+            if (_mainPlayer != null)
+            {
+                _mouseLookControlField.SetValue(_mainPlayer, enable);
+            }
+        }
+
+        private void PauseAllAudio()
+        {
+            _pausedAudioSources.Clear();
+            foreach (var audioSource in FindObjectsOfType<AudioSource>())
+            {
+                if (audioSource.isPlaying)
+                {
+                    audioSource.Pause();
+                    _pausedAudioSources.Add(audioSource);
+                }
+            }
+        }
+
+        private void ResumeAllAudio()
+        {
+            foreach (var audioSource in _pausedAudioSources)
+            {
+                audioSource.UnPause();
+            }
+            _pausedAudioSources.Clear();
         }
 
         private IEnumerable<Player> GetPlayers() => _gameWorld?.AllAlivePlayersList ?? new List<Player>();
@@ -170,28 +237,31 @@ namespace Pause
 
         private void UpdateTimers(TimeSpan timePaused)
         {
-            var startTimeField = typeof(GameTimerClass).GetField("nullable_0", BindingFlags.Instance | BindingFlags.NonPublic);
-            var escapeTimeField = typeof(GameTimerClass).GetField("nullable_1", BindingFlags.Instance | BindingFlags.NonPublic);
-            var timerPanelField = typeof(TimerPanel).GetField("dateTime_0", BindingFlags.Instance | BindingFlags.NonPublic);
-            var gameDateTimeField = typeof(GameDateTime).GetField("_realtimeSinceStartup", BindingFlags.Instance | BindingFlags.NonPublic);
-
-            if (startTimeField == null || escapeTimeField == null || timerPanelField == null || gameDateTimeField == null)
-            {
-                Logger.LogError("Failed to retrieve necessary fields via reflection.");
-                return;
-            }
-
-            var startDate = startTimeField.GetValue(_gameTimerClass) as DateTime?;
-            var escapeDate = timerPanelField.GetValue(_mainTimerPanel) as DateTime?;
-            var realTimeSinceStartup = (float)gameDateTimeField.GetValue(_gameWorld.GameDateTime);
+            var startDate = _startTimeField.GetValue(_gameTimerClass) as DateTime?;
+            var escapeDate = _timerPanelField.GetValue(_mainTimerPanel) as DateTime?;
+            var realTimeSinceStartup = (float)_gameDateTimeField.GetValue(_gameWorld.GameDateTime);
 
             if (startDate.HasValue && escapeDate.HasValue)
             {
-                startTimeField.SetValue(_gameTimerClass, startDate.Value.Add(timePaused));
-                escapeTimeField.SetValue(_gameTimerClass, escapeDate.Value.Add(timePaused));
-                timerPanelField.SetValue(_mainTimerPanel, escapeDate.Value.Add(timePaused));
-                gameDateTimeField.SetValue(_gameWorld.GameDateTime, realTimeSinceStartup + (float)timePaused.TotalSeconds);
+                _startTimeField.SetValue(_gameTimerClass, startDate.Value.Add(timePaused));
+                _escapeTimeField.SetValue(_gameTimerClass, escapeDate.Value.Add(timePaused));
+                _timerPanelField.SetValue(_mainTimerPanel, escapeDate.Value.Add(timePaused));
+                _gameDateTimeField.SetValue(_gameWorld.GameDateTime, realTimeSinceStartup + (float)timePaused.TotalSeconds);
             }
+        }
+
+        private void OnDestroy()
+        {
+            IsPaused = false;
+            _gameWorld = null;
+            _mainPlayer = null;
+            Logger = null;
+            _pausedAudioSources.Clear();
+            _mouseLookControlField = null;
+            _startTimeField = null;
+            _escapeTimeField = null;
+            _timerPanelField = null;
+            _gameDateTimeField = null;
         }
 
         internal static void Enable()

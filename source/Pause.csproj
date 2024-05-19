@@ -16,6 +16,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Reference Include="0Harmony">
+      <HintPath>F:\SPT-AKI-DEV\BepInEx\core\0Harmony.dll</HintPath>
+    </Reference>
     <Reference Include="Aki.Common">
       <HintPath>$(DepsPath)\Aki.Common.dll</HintPath>
       <Private>False</Private>
