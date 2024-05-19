@@ -55,19 +55,20 @@ namespace Pause
             Logger = BepInEx.Logging.Logger.CreateLogSource(nameof(PauseController));
 
             IsPaused = false;
-            _abstractGame = GameObject.FindObjectOfType<AbstractGame>();
+            _abstractGame = Singleton<AbstractGame>.Instance;
             _mainTimerPanel = GameObject.FindObjectOfType<MainTimerPanel>();
             _gameTimerClass = _abstractGame?.GameTimer;
 
             _mouseLookControlField = AccessTools.Field(typeof(Player), "_mouseLookControl");
 
-            _startTimeField = typeof(GameTimerClass).GetField("nullable_0", BindingFlags.Instance | BindingFlags.NonPublic);
-            _escapeTimeField = typeof(GameTimerClass).GetField("nullable_1", BindingFlags.Instance | BindingFlags.NonPublic);
-            _timerPanelField = typeof(TimerPanel).GetField("dateTime_0", BindingFlags.Instance | BindingFlags.NonPublic);
-            _gameDateTimeField = typeof(GameDateTime).GetField("_realtimeSinceStartup", BindingFlags.Instance | BindingFlags.NonPublic);
+            _startTimeField = AccessTools.Field(typeof(GameTimerClass), "nullable_0");
+            _escapeTimeField = AccessTools.Field(typeof(GameTimerClass), "nullable_1");
+            _timerPanelField = AccessTools.Field(typeof(TimerPanel), "dateTime_0");
+            _gameDateTimeField = AccessTools.Field(typeof(GameDateTime), "_realtimeSinceStartup");
 
             _pausedAudioSources = new List<AudioSource>();
         }
+
 
         private void Update()
         {
