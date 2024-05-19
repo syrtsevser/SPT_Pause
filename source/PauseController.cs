@@ -59,32 +59,12 @@ namespace Pause
             _mainTimerPanel = GameObject.FindObjectOfType<MainTimerPanel>();
             _gameTimerClass = _abstractGame?.GameTimer;
 
-            if (_gameTimerClass == null || _mainTimerPanel == null)
-            {
-                Logger.LogError("Failed to find necessary game components.");
-                enabled = false;
-                return;
-            }
-
             _mouseLookControlField = AccessTools.Field(typeof(Player), "_mouseLookControl");
-            if (_mouseLookControlField == null)
-            {
-                Logger.LogError("Failed to find _mouseLookControl field.");
-                enabled = false;
-                return;
-            }
 
             _startTimeField = typeof(GameTimerClass).GetField("nullable_0", BindingFlags.Instance | BindingFlags.NonPublic);
             _escapeTimeField = typeof(GameTimerClass).GetField("nullable_1", BindingFlags.Instance | BindingFlags.NonPublic);
             _timerPanelField = typeof(TimerPanel).GetField("dateTime_0", BindingFlags.Instance | BindingFlags.NonPublic);
             _gameDateTimeField = typeof(GameDateTime).GetField("_realtimeSinceStartup", BindingFlags.Instance | BindingFlags.NonPublic);
-
-            if (_startTimeField == null || _escapeTimeField == null || _timerPanelField == null || _gameDateTimeField == null)
-            {
-                Logger.LogError("Failed to retrieve necessary fields via reflection.");
-                enabled = false;
-                return;
-            }
 
             _pausedAudioSources = new List<AudioSource>();
         }
