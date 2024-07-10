@@ -1,9 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net472</TargetFramework>
+    <TargetFramework>net471</TargetFramework>
     <AssemblyName>dvize.Pause</AssemblyName>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
@@ -19,14 +19,6 @@
     <Reference Include="0Harmony">
       <HintPath>F:\SPT-AKI-DEV\BepInEx\core\0Harmony.dll</HintPath>
     </Reference>
-    <Reference Include="Aki.Common">
-      <HintPath>$(DepsPath)\Aki.Common.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Aki.Reflection">
-      <HintPath>$(DepsPath)\Aki.Reflection.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="Assembly-CSharp">
       <HintPath>$(DepsPath)\Assembly-CSharp.dll</HintPath>
       <Private>False</Private>
@@ -41,6 +33,12 @@
     <Reference Include="Newtonsoft.Json">
       <HintPath>$(DepsPath)\Newtonsoft.Json.dll</HintPath>
       <Private>False</Private>
+    </Reference>
+    <Reference Include="spt-common">
+      <HintPath>F:\SPT-AKI-DEV\BepInEx\plugins\spt\spt-common.dll</HintPath>
+    </Reference>
+    <Reference Include="spt-reflection">
+      <HintPath>F:\SPT-AKI-DEV\BepInEx\plugins\spt\spt-reflection.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine">
       <HintPath>$(DepsPath)\UnityEngine.dll</HintPath>
@@ -131,6 +129,6 @@
   </ItemGroup>
 
 	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Exec Command="copy &quot;$(TargetPath)&quot; &quot;F:\SPT-AKI-DEV\BepInEx\plugins\$(TargetName).dll&quot;&#xD;&#xA;&#xD;&#xA;if $(ConfigurationName) == Debug (&#xD;&#xA;    copy &quot;$(TargetDir)$(TargetName).pdb&quot; &quot;F:\SPT-AKI-DEV\BepInEx\plugins\$(TargetName).pdb&quot;&#xD;&#xA;) else (&#xD;&#xA;    del &quot;F:\SPT-AKI-DEV\BepInEx\plugins\$(TargetName).pdb&quot;&#xD;&#xA;)" />
+    <Exec Command="copy &quot;$(TargetPath)&quot; &quot;F:\SPT-AKI-DEV\BepInEx\plugins\$(TargetName).dll&quot;&#xD;&#xA;&#xD;&#xA;if &quot;$(ConfigurationName)&quot; == &quot;Debug&quot; (&#xD;&#xA;    copy &quot;$(TargetDir)$(TargetName).pdb&quot; &quot;F:\SPT-AKI-DEV\BepInEx\plugins\$(TargetName).pdb&quot;&#xD;&#xA;) else ( &#xD;&#xA;    del &quot;F:\SPT-AKI-DEV\BepInEx\plugins\$(TargetName).pdb&quot;&#xD;&#xA;)&#xD;&#xA;&#xD;&#xA;if &quot;$(ConfigurationName)&quot; == &quot;Release&quot; (&#xD;&#xA;    powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File &quot;$(ProjectDir)PackageMods.ps1&quot; -ConfigurationName &quot;$(ConfigurationName)&quot; -TargetPath &quot;F:\SPT-AKI-DEV\BepInEx\plugins\$(TargetName).dll&quot; -TargetName &quot;$(TargetName)&quot; -TargetDir &quot;F:\SPT-AKI-DEV\BepInEx\plugins\&quot;&#xD;&#xA;)" />
   </Target>
 </Project>

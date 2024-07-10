@@ -2,13 +2,13 @@ using BepInEx;
 using UnityEngine;
 using BepInEx.Configuration;
 using BepInEx.Logging;
-using Aki.Reflection.Patching;
+using SPT.Reflection.Patching;
 using EFT;
 using System.Reflection;
 
 namespace Pause
 {
-    [BepInPlugin("com.dvize.pause", "PAUSE", "1.0.0")]
+    [BepInPlugin("com.dvize.pause", "PAUSE", "1.1.0")]
     public class Plugin : BaseUnityPlugin
     {
         internal static ConfigEntry<KeyboardShortcut> TogglePause;
@@ -32,9 +32,7 @@ namespace Pause
             new EndByTimerScenarioUpdatePatch().Enable();
 
             //Base Local Game Patches
-           // new BaseLocalGameUpdatePatch().Enable();
-            //new BaseLocalGameStopPatch().Enable();
-            //new BaseLocalGameStopSessionPatch().Enable();
+            new BaseLocalGameUpdatePatch().Enable();
         }
 
         internal class NewGamePatch : ModulePatch
