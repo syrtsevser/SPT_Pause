@@ -57,7 +57,7 @@ if ($deployDir -ne $baseDir) {
         New-Item -ItemType Directory -Path $tempZipDir
         Log "TempZipDir created: $tempZipDir"
 
-        $newZipStructure = Join-Path $tempZipDir "Bepinex\plugins\$directoryName"
+        $newZipStructure = Join-Path $tempZipDir "Bepinex" "plugins" $directoryName
         New-Item -ItemType Directory -Path $newZipStructure -Force
         Log "New zip structure directory created: $newZipStructure"
 
@@ -96,7 +96,7 @@ if ($deployDir -ne $baseDir) {
     Log "TempZipDir created: $tempZipDir"
 
     # Create the required folder structure within the temp directory
-    $bepinexPluginsDir = Join-Path $tempZipDir "Bepinex\plugins"
+    $bepinexPluginsDir = Join-Path $tempZipDir "Bepinex" "plugins"
     New-Item -ItemType Directory -Path $bepinexPluginsDir -Force
     Log "Bepinex\plugins directory created: $bepinexPluginsDir"
 
