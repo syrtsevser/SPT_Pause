@@ -8,9 +8,12 @@ using BepInEx.Configuration;
 using BepInEx.Logging;
 using Comfort.Common;
 using EFT;
+using EFT.Animations;
+using EFT.CameraControl;
 using EFT.UI.BattleTimer;
 using HarmonyLib;
 using UnityEngine;
+using static EFT.Player;
 
 namespace Pause
 {
@@ -35,6 +38,9 @@ namespace Pause
         private static FieldInfo _timerPanelField;
         private static FieldInfo _gameDateTimeField;
 
+        private static FieldInfo _firearmAnimationDataField;
+        private static FieldInfo _isAimingField;
+
         internal static ManualLogSource Logger;
 
         private List<AudioSource> _pausedAudioSources;
@@ -49,11 +55,14 @@ namespace Pause
             _gameTimerClass = _abstractGame?.GameTimer;
 
             _mouseLookControlField = AccessTools.Field(typeof(Player), "_mouseLookControl");
+            _firearmAnimationDataField = AccessTools.Field(typeof(ProceduralWeaponAnimation), "_firearmAnimationData");
+            _isAimingField = AccessTools.Field(typeof(ProceduralWeaponAnimation), "_isAiming");
 
             _startTimeField = AccessTools.Field(typeof(GameTimerClass), "nullable_0");
             _escapeTimeField = AccessTools.Field(typeof(GameTimerClass), "nullable_1");
             _timerPanelField = AccessTools.Field(typeof(TimerPanel), "dateTime_0");
             _gameDateTimeField = AccessTools.Field(typeof(GameDateTime), "_realtimeSinceStartup");
+
 
             _pausedAudioSources = new List<AudioSource>();
         }
@@ -71,17 +80,18 @@ namespace Pause
                 else
                 {
                     Unpause();
+                    ResetFov();
                 }
             }
         }
 
         private void Pause()
         {
+
             Time.timeScale = 0f;
             _pausedDate = DateTime.UtcNow;
 
             _mainPlayer.enabled = false;
-            SetMouseLookControl(false);
             _mainPlayer.PauseAllEffectsOnPlayer();
 
             foreach (var player in GetPlayers())
@@ -98,11 +108,11 @@ namespace Pause
 
         private void Unpause()
         {
+
             Time.timeScale = 1f;
             _unpausedDate = DateTime.UtcNow;
 
             _mainPlayer.enabled = true;
-            SetMouseLookControl(true);
             _mainPlayer.UnpauseAllEffectsOnPlayer();
 
             foreach (var player in GetPlayers())
@@ -117,14 +127,6 @@ namespace Pause
             StartCoroutine(CoHideTimer());
 
             UpdateTimers(GetTimePaused());
-        }
-
-        private void SetMouseLookControl(bool enable)
-        {
-            if (_mainPlayer != null)
-            {
-                _mouseLookControlField.SetValue(_mainPlayer, enable);
-            }
         }
 
         private void PauseAllAudio()
@@ -216,6 +218,34 @@ namespace Pause
                 _escapeTimeField.SetValue(_gameTimerClass, escapeDate.Value.Add(timePaused));
                 _timerPanelField.SetValue(_mainTimerPanel, escapeDate.Value.Add(timePaused));
                 _gameDateTimeField.SetValue(_gameWorld.GameDateTime, realTimeSinceStartup + (float)timePaused.TotalSeconds);
+            }
+        }
+        private void ResetFov()
+        {
+            if (_mainPlayer == null || _mainPlayer.ProceduralWeaponAnimation == null)
+                return;
+
+            float baseFOV = _mainPlayer.ProceduralWeaponAnimation.Single_2;
+            float targetFOV = baseFOV;
+
+            var firearmAnimationData = _firearmAnimationDataField.GetValue(_mainPlayer.ProceduralWeaponAnimation) as GInterface139;
+            var isAiming = (bool)_isAimingField.GetValue(_mainPlayer.ProceduralWeaponAnimation);
+
+            if (_mainPlayer.ProceduralWeaponAnimation.PointOfView == EPointOfView.FirstPerson && firearmAnimationData != null)
+            {
+                if (_mainPlayer.ProceduralWeaponAnimation.AimIndex < _mainPlayer.ProceduralWeaponAnimation.ScopeAimTransforms.Count && !firearmAnimationData.MouseLookControl)
+                {
+                    if (isAiming)
+                    {
+                        targetFOV = _mainPlayer.ProceduralWeaponAnimation.CurrentScope.IsOptic ? 35f : (baseFOV - 15f);
+                    }
+
+                    // Log what the current FOV is 
+#if DEBUG
+            Logger.LogWarning($"Current FOV (When Unpausing): {CameraClass.Instance.Fov} Base FOV: {baseFOV} Target FOV: {targetFOV}");
+#endif
+                    CameraClass.Instance.SetFov(targetFOV, 1f, !isAiming);
+                }
             }
         }
 
