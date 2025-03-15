@@ -12,7 +12,7 @@ namespace Pause
 	/// <summary>
 	/// Pause game mod.
 	/// </summary>
-	[BepInPlugin("com.dvize.pause", "PAUSE", "1.1.2")]
+	[BepInPlugin("com.dvize.pause", "PAUSE", "1.2.1")]
 	public class Plugin : BaseUnityPlugin
 	{
 		/// <summary>

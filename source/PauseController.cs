@@ -21,12 +21,16 @@ namespace Pause
 	/// </summary>
 	public class PauseController : MonoBehaviour
 	{
-		#region Fields and properties
+		#region Properties
 
 		/// <summary>
 		/// Is game paused.
 		/// </summary>
 		internal static bool IsPaused { get; private set; }
+
+		#endregion Properties
+
+		#region Fields: Private
 
 		/// <summary>
 		/// Paused game on.
@@ -37,17 +41,6 @@ namespace Pause
 		/// Resumed game on.
 		/// </summary>
 		private DateTime? _unpausedDate;
-
-		/// <summary>
-		/// Game world.
-		/// Used to determine if game is in the right state to be able to pause.
-		/// </summary>
-		private static GameWorld GameWorld;
-
-		/// <summary>
-		/// Player.
-		/// </summary>
-		private static Player MainPlayer;
 
 		/// <summary>
 		/// Game timer class.
@@ -65,6 +58,41 @@ namespace Pause
 		/// Abstract game.
 		/// </summary>
 		private AbstractGame _abstractGame;
+
+		/// <summary>
+		/// Paused audio sources.
+		/// </summary>
+		private List<AudioSource> _pausedAudioSources;
+
+		#endregion Fields: Private
+
+		#region Fields: Static
+
+		/// <summary>
+		/// Logger.
+		/// </summary>
+		internal static ManualLogSource Logger;
+
+		/// <summary>
+		/// Game world.
+		/// Used to determine if game is in the right state to be able to pause.
+		/// </summary>
+		private static GameWorld GameWorld;
+
+		/// <summary>
+		/// Player.
+		/// </summary>
+		private static Player MainPlayer;
+
+		/// <summary>
+		/// Mouse look control field info.
+		/// </summary>
+		private static FieldInfo MouseLookControlField;
+
+		/// <summary>
+		/// "Is aiming" field info.
+		/// </summary>
+		private static FieldInfo IsAimingField;
 
 		/// <summary>
 		/// Start time field info.
@@ -86,27 +114,7 @@ namespace Pause
 		/// </summary>
 		private static FieldInfo GameDateTimeField;
 
-		/// <summary>
-		/// Firearm animation data field info.
-		/// </summary>
-		private static FieldInfo FirearmAnimationDataField;
-
-		/// <summary>
-		/// "Is aiming" field info.
-		/// </summary>
-		private static FieldInfo IsAimingField;
-
-		/// <summary>
-		/// Logger.
-		/// </summary>
-		internal static ManualLogSource Logger;
-
-		/// <summary>
-		/// Paused audio sources.
-		/// </summary>
-		private List<AudioSource> _pausedAudioSources;
-
-		#endregion Fields and properties
+		#endregion Fields: Static
 
 		/// <summary>
 		/// Initializes mod.
@@ -120,16 +128,14 @@ namespace Pause
 			_abstractGame = Singleton<AbstractGame>.Instance;
 			_mainTimerPanel = FindObjectOfType<MainTimerPanel>();
 			_gameTimerClass = _abstractGame?.GameTimer;
+			_pausedAudioSources = new List<AudioSource>();
 
-			FirearmAnimationDataField = AccessTools.Field(typeof(ProceduralWeaponAnimation), "_firearmAnimationData");
+			MouseLookControlField = AccessTools.Field(typeof(Player), "MouseLookControl");
 			IsAimingField = AccessTools.Field(typeof(ProceduralWeaponAnimation), "_isAiming");
-
 			StartTimeField = AccessTools.Field(typeof(GameTimerClass), "nullable_0");
 			EscapeTimeField = AccessTools.Field(typeof(GameTimerClass), "nullable_1");
 			TimerPanelField = AccessTools.Field(typeof(TimerPanel), "dateTime_0");
 			GameDateTimeField = AccessTools.Field(typeof(GameDateTime), "_realtimeSinceStartup");
-
-			_pausedAudioSources = new List<AudioSource>();
 		}
 
 		/// <summary>
@@ -143,6 +149,7 @@ namespace Pause
 			MainPlayer = null;
 			Logger = null;
 			_pausedAudioSources.Clear();
+			MouseLookControlField = null;
 			StartTimeField = null;
 			EscapeTimeField = null;
 			TimerPanelField = null;
@@ -342,19 +349,31 @@ namespace Pause
 		/// <param name="timePaused"> Time spent in paused state. </param>
 		private void UpdateTimers(TimeSpan timePaused)
 		{
+			// Safely retrieve values using reflection.
 			var startDate = StartTimeField.GetValue(_gameTimerClass) as DateTime?;
 			var escapeDate = TimerPanelField.GetValue(_mainTimerPanel) as DateTime?;
-			var realTimeSinceStartup = (float)(GameDateTimeField.GetValue(GameWorld.GameDateTime) ?? 0);
+			var timerPanelDate = TimerPanelField.GetValue(_mainTimerPanel) as DateTime?;
+			var realTimeSinceStartup = GameDateTimeField.GetValue(GameWorld.GameDateTime) as float?;
 
-			if (!startDate.HasValue || !escapeDate.HasValue)
+			if (!startDate.HasValue
+				|| !escapeDate.HasValue
+				|| !timerPanelDate.HasValue
+				|| !realTimeSinceStartup.HasValue)
 			{
 				return;
 			}
 
-			StartTimeField.SetValue(_gameTimerClass, startDate.Value.Add(timePaused));
-			EscapeTimeField.SetValue(_gameTimerClass, escapeDate.Value.Add(timePaused));
-			TimerPanelField.SetValue(_mainTimerPanel, escapeDate.Value.Add(timePaused));
-			GameDateTimeField.SetValue(GameWorld.GameDateTime, realTimeSinceStartup + (float)timePaused.TotalSeconds);
+			// Adjust DateTime values.
+			var adjustedStartDate = startDate.Value.Add(timePaused);
+			var adjustedEscapeDate = escapeDate.Value.Add(timePaused);
+			var adjustedTimerPanelDate = timerPanelDate.Value.Add(timePaused);
+			var adjustedRealTime = realTimeSinceStartup.Value + (float)timePaused.TotalSeconds;
+
+			// Set updated values back.
+			StartTimeField.SetValue(_gameTimerClass, adjustedStartDate);
+			EscapeTimeField.SetValue(_gameTimerClass, adjustedEscapeDate);
+			TimerPanelField.SetValue(_mainTimerPanel, adjustedTimerPanelDate);
+			GameDateTimeField.SetValue(GameWorld.GameDateTime, adjustedRealTime);
 		}
 
 		/// <summary>
@@ -366,16 +385,16 @@ namespace Pause
 			{
 				return;
 			}
-			
+
 			var baseFov = MainPlayer.ProceduralWeaponAnimation.Single_2;
 			var targetFov = baseFov;
 
-			var firearmAnimationData = FirearmAnimationDataField.GetValue(MainPlayer.ProceduralWeaponAnimation) as Player;
-			var isAiming = (bool)IsAimingField.GetValue(MainPlayer.ProceduralWeaponAnimation);
+			var mouseLookControlPlayer = MouseLookControlField.GetValue(typeof(Player)) as Player;
+			var isAiming = (bool)(IsAimingField.GetValue(MainPlayer.ProceduralWeaponAnimation) ?? false);
 
 			if (MainPlayer.ProceduralWeaponAnimation.PointOfView != EPointOfView.FirstPerson
-				|| firearmAnimationData == null
-				|| firearmAnimationData.MouseLookControl
+				|| mouseLookControlPlayer == null
+				|| mouseLookControlPlayer.MouseLookControl
 				|| MainPlayer.ProceduralWeaponAnimation.AimIndex >= MainPlayer.ProceduralWeaponAnimation.ScopeAimTransforms.Count)
 			{
 				return;
@@ -388,9 +407,7 @@ namespace Pause
 					: baseFov - 15f;
 			}
 
-#if DEBUG
-			Logger.LogInfo($"Current FOV (When Unpausing): {CameraClass.Instance.Fov} Base FOV: {baseFov} Target FOV: {targetFov}");
-#endif
+			Logger.LogDebug($"Current FOV (When Unpausing): {CameraClass.Instance.Fov}, Base FOV: {baseFov}, Target FOV: {targetFov}");
 			CameraClass.Instance.SetFov(targetFov, 1f, !isAiming);
 		}
 
