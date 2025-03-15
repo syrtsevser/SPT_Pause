@@ -1,285 +1,424 @@
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using Comfort.Common;
 using EFT;
 using EFT.Animations;
-using EFT.CameraControl;
 using EFT.UI.BattleTimer;
 using HarmonyLib;
+using JetBrains.Annotations;
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using UnityEngine;
-using static EFT.Player;
 
 namespace Pause
 {
-    public class PauseController : MonoBehaviour
-    {
-        internal static bool IsPaused { get; private set; } = false;
+	/// <summary>
+	/// Game pause controller.
+	/// </summary>
+	public class PauseController : MonoBehaviour
+	{
+		#region Fields and properties
 
-        private DateTime? _pausedDate;
-        private DateTime? _unpausedDate;
+		/// <summary>
+		/// Is game paused.
+		/// </summary>
+		internal static bool IsPaused { get; private set; }
 
-        private static GameWorld _gameWorld;
-        private static Player _mainPlayer;
+		/// <summary>
+		/// Paused game on.
+		/// </summary>
+		private DateTime? _pausedDate;
 
-        private GameTimerClass _gameTimerClass;
-        private MainTimerPanel _mainTimerPanel;
-        private AbstractGame _abstractGame;
+		/// <summary>
+		/// Resumed game on.
+		/// </summary>
+		private DateTime? _unpausedDate;
 
-        private static FieldInfo _mouseLookControlField;
+		/// <summary>
+		/// Game world.
+		/// Used to determine if game is in the right state to be able to pause.
+		/// </summary>
+		private static GameWorld GameWorld;
 
-        private static FieldInfo _startTimeField;
-        private static FieldInfo _escapeTimeField;
-        private static FieldInfo _timerPanelField;
-        private static FieldInfo _gameDateTimeField;
+		/// <summary>
+		/// Player.
+		/// </summary>
+		private static Player MainPlayer;
 
-        private static FieldInfo _firearmAnimationDataField;
-        private static FieldInfo _isAimingField;
+		/// <summary>
+		/// Game timer class.
+		/// Controls actual raid time.
+		/// </summary>
+		private GameTimerClass _gameTimerClass;
 
-        internal static ManualLogSource Logger;
+		/// <summary>
+		/// Main timer panel.
+		/// Controls on screen raid time.
+		/// </summary>
+		private MainTimerPanel _mainTimerPanel;
 
-        private List<AudioSource> _pausedAudioSources;
+		/// <summary>
+		/// Abstract game.
+		/// </summary>
+		private AbstractGame _abstractGame;
 
-        private void Awake()
-        {
-            Logger = BepInEx.Logging.Logger.CreateLogSource(nameof(PauseController));
+		/// <summary>
+		/// Start time field info.
+		/// </summary>
+		private static FieldInfo StartTimeField;
 
-            IsPaused = false;
-            _abstractGame = Singleton<AbstractGame>.Instance;
-            _mainTimerPanel = GameObject.FindObjectOfType<MainTimerPanel>();
-            _gameTimerClass = _abstractGame?.GameTimer;
+		/// <summary>
+		/// Escape time field info.
+		/// </summary>
+		private static FieldInfo EscapeTimeField;
 
-            _mouseLookControlField = AccessTools.Field(typeof(Player), "_mouseLookControl");
-            _firearmAnimationDataField = AccessTools.Field(typeof(ProceduralWeaponAnimation), "_firearmAnimationData");
-            _isAimingField = AccessTools.Field(typeof(ProceduralWeaponAnimation), "_isAiming");
+		/// <summary>
+		/// Timer panel field info.
+		/// </summary>
+		private static FieldInfo TimerPanelField;
 
-            _startTimeField = AccessTools.Field(typeof(GameTimerClass), "nullable_0");
-            _escapeTimeField = AccessTools.Field(typeof(GameTimerClass), "nullable_1");
-            _timerPanelField = AccessTools.Field(typeof(TimerPanel), "dateTime_0");
-            _gameDateTimeField = AccessTools.Field(typeof(GameDateTime), "_realtimeSinceStartup");
+		/// <summary>
+		/// Game time field info.
+		/// </summary>
+		private static FieldInfo GameDateTimeField;
 
+		/// <summary>
+		/// Firearm animation data field info.
+		/// </summary>
+		private static FieldInfo FirearmAnimationDataField;
 
-            _pausedAudioSources = new List<AudioSource>();
-        }
+		/// <summary>
+		/// "Is aiming" field info.
+		/// </summary>
+		private static FieldInfo IsAimingField;
 
-        private void Update()
-        {
-            if (IsKeyPressed(Plugin.TogglePause.Value))
-            {
-                IsPaused = !IsPaused;
+		/// <summary>
+		/// Logger.
+		/// </summary>
+		internal static ManualLogSource Logger;
 
-                if (IsPaused)
-                {
-                    Pause();
-                }
-                else
-                {
-                    Unpause();
-                    ResetFov();
-                }
-            }
-        }
+		/// <summary>
+		/// Paused audio sources.
+		/// </summary>
+		private List<AudioSource> _pausedAudioSources;
 
-        private void Pause()
-        {
+		#endregion Fields and properties
 
-            Time.timeScale = 0f;
-            _pausedDate = DateTime.UtcNow;
+		/// <summary>
+		/// Initializes mod.
+		/// </summary>
+		[UsedImplicitly]
+		private void Awake()
+		{
+			Logger = BepInEx.Logging.Logger.CreateLogSource(nameof(PauseController));
 
-            _mainPlayer.enabled = false;
-            _mainPlayer.PauseAllEffectsOnPlayer();
+			IsPaused = false;
+			_abstractGame = Singleton<AbstractGame>.Instance;
+			_mainTimerPanel = FindObjectOfType<MainTimerPanel>();
+			_gameTimerClass = _abstractGame?.GameTimer;
 
-            foreach (var player in GetPlayers())
-            {
-                if (player.IsYourPlayer) continue;
+			FirearmAnimationDataField = AccessTools.Field(typeof(ProceduralWeaponAnimation), "_firearmAnimationData");
+			IsAimingField = AccessTools.Field(typeof(ProceduralWeaponAnimation), "_isAiming");
 
-                Logger.LogInfo($"Deactivating player: {player?.name}");
-                SetPlayerState(player, false);
-            }
+			StartTimeField = AccessTools.Field(typeof(GameTimerClass), "nullable_0");
+			EscapeTimeField = AccessTools.Field(typeof(GameTimerClass), "nullable_1");
+			TimerPanelField = AccessTools.Field(typeof(TimerPanel), "dateTime_0");
+			GameDateTimeField = AccessTools.Field(typeof(GameDateTime), "_realtimeSinceStartup");
 
-            PauseAllAudio();
-            ShowTimer();
-        }
+			_pausedAudioSources = new List<AudioSource>();
+		}
 
-        private void Unpause()
-        {
+		/// <summary>
+		/// Processes instance destruction.
+		/// </summary>
+		[UsedImplicitly]
+		private void OnDestroy()
+		{
+			IsPaused = false;
+			GameWorld = null;
+			MainPlayer = null;
+			Logger = null;
+			_pausedAudioSources.Clear();
+			StartTimeField = null;
+			EscapeTimeField = null;
+			TimerPanelField = null;
+			GameDateTimeField = null;
+		}
 
-            Time.timeScale = 1f;
-            _unpausedDate = DateTime.UtcNow;
+		/// <summary>
+		/// Processes update.
+		/// </summary>
+		[UsedImplicitly]
+		private void Update()
+		{
+			if (!IsKeyPressed(Plugin.TogglePause.Value))
+			{
+				return;
+			}
 
-            _mainPlayer.enabled = true;
-            _mainPlayer.UnpauseAllEffectsOnPlayer();
+			IsPaused = !IsPaused;
 
-            foreach (var player in GetPlayers())
-            {
-                if (player.IsYourPlayer) continue;
+			if (IsPaused)
+			{
+				Pause();
+			}
+			else
+			{
+				Unpause();
+				ResetFov();
+			}
+		}
 
-                Logger.LogInfo($"Reactivating player: {player?.name}");
-                SetPlayerState(player, true);
-            }
+		/// <summary>
+		/// Pauses the game.
+		/// </summary>
+		private void Pause()
+		{
+			Time.timeScale = 0f;
+			_pausedDate = DateTime.UtcNow;
 
-            ResumeAllAudio();
-            StartCoroutine(CoHideTimer());
+			MainPlayer.enabled = false;
+			MainPlayer.PauseAllEffectsOnPlayer();
 
-            UpdateTimers(GetTimePaused());
-        }
+			foreach (var player in GetPlayers().Where(p => !p.IsYourPlayer))
+			{
+				Logger.LogInfo($"Deactivating player: {player.name}");
+				SetPlayerState(player, false);
+			}
 
-        private void PauseAllAudio()
-        {
-            _pausedAudioSources.Clear();
-            foreach (var audioSource in FindObjectsOfType<AudioSource>())
-            {
-                if (audioSource.isPlaying)
-                {
-                    audioSource.Pause();
-                    _pausedAudioSources.Add(audioSource);
-                }
-            }
-        }
+			PauseAllAudio();
+			ShowTimer();
+		}
 
-        private void ResumeAllAudio()
-        {
-            foreach (var audioSource in _pausedAudioSources)
-            {
-                audioSource.UnPause();
-            }
-            _pausedAudioSources.Clear();
-        }
+		/// <summary>
+		/// Resumes the game.
+		/// </summary>
+		private void Unpause()
+		{
+			Time.timeScale = 1f;
+			_unpausedDate = DateTime.UtcNow;
 
-        private IEnumerable<Player> GetPlayers() => _gameWorld?.AllAlivePlayersList ?? new List<Player>();
+			MainPlayer.enabled = true;
+			MainPlayer.UnpauseAllEffectsOnPlayer();
 
-        private void SetPlayerState(Player player, bool active)
-        {
-            foreach (var r in player.PlayerBones.GetComponentsInChildren<Rigidbody>())
-            {
-                r.velocity = Vector3.zero;
-                r.angularVelocity = Vector3.zero;
+			foreach (var player in GetPlayers().Where(p => !p.IsYourPlayer))
+			{
+				Logger.LogInfo($"Reactivating player: {player.name}");
+				SetPlayerState(player, true);
+			}
 
-                if (active)
-                {
-                    r.WakeUp();
-                }
-                else
-                {
-                    r.Sleep();
-                }
-            }
+			ResumeAllAudio();
+			StartCoroutine(CoHideTimer());
 
-            var weaponRigidBody = player.HandsController?.ControllerGameObject?.GetComponent<Rigidbody>();
-            if (weaponRigidBody != null)
-            {
-                weaponRigidBody.angularVelocity = Vector3.zero;
-                weaponRigidBody.velocity = Vector3.zero;
-                weaponRigidBody.Sleep();
-            }
+			UpdateTimers(GetTimePaused());
+		}
 
-            if (!active)
-            {
-                player.AIData.BotOwner.DecisionQueue.Clear();
-                player.gameObject.SetActive(false);
-            }
-            else
-            {
-                player.gameObject.SetActive(true);
-                player.AIData.BotOwner.CalcGoal();
-            }
-        }
+		/// <summary>
+		/// Pauses all audio instances.
+		/// </summary>
+		private void PauseAllAudio()
+		{
+			_pausedAudioSources.Clear();
+			foreach (var audioSource in FindObjectsOfType<AudioSource>().Where(s => s.isPlaying))
+			{
+				audioSource.Pause();
+				_pausedAudioSources.Add(audioSource);
+			}
+		}
 
-        private void ShowTimer()
-        {
-            _mainTimerPanel?.DisplayTimer();
-        }
+		/// <summary>
+		/// Resumes all audio instances.
+		/// </summary>
+		private void ResumeAllAudio()
+		{
+			foreach (var audioSource in _pausedAudioSources)
+			{
+				audioSource.UnPause();
+			}
 
-        private IEnumerator CoHideTimer()
-        {
-            if (_mainTimerPanel != null)
-            {
-                yield return new WaitForSeconds(4f);
-                _mainTimerPanel.HideTimer();
-            }
-        }
+			_pausedAudioSources.Clear();
+		}
 
-        private TimeSpan GetTimePaused() => (_pausedDate.HasValue && _unpausedDate.HasValue) ? _unpausedDate.Value - _pausedDate.Value : TimeSpan.Zero;
+		/// <summary>
+		/// Returns all players.
+		/// </summary>
+		/// <returns> Players list. </returns>
+		private static IEnumerable<Player> GetPlayers()
+		{
+			return GameWorld?.AllAlivePlayersList ?? new List<Player>();
+		}
 
-        private void UpdateTimers(TimeSpan timePaused)
-        {
-            var startDate = _startTimeField.GetValue(_gameTimerClass) as DateTime?;
-            var escapeDate = _timerPanelField.GetValue(_mainTimerPanel) as DateTime?;
-            var realTimeSinceStartup = (float)_gameDateTimeField.GetValue(_gameWorld.GameDateTime);
+		/// <summary>
+		/// Sets player state.
+		/// </summary>
+		/// <param name="player"> Player. </param>
+		/// <param name="active"> Is active. </param>
+		private static void SetPlayerState(Player player, bool active)
+		{
+			if (player == null)
+			{
+				return;
+			}
 
-            if (startDate.HasValue && escapeDate.HasValue)
-            {
-                _startTimeField.SetValue(_gameTimerClass, startDate.Value.Add(timePaused));
-                _escapeTimeField.SetValue(_gameTimerClass, escapeDate.Value.Add(timePaused));
-                _timerPanelField.SetValue(_mainTimerPanel, escapeDate.Value.Add(timePaused));
-                _gameDateTimeField.SetValue(_gameWorld.GameDateTime, realTimeSinceStartup + (float)timePaused.TotalSeconds);
-            }
-        }
-        private void ResetFov()
-        {
-            if (_mainPlayer == null || _mainPlayer.ProceduralWeaponAnimation == null)
-                return;
+			if (player.PlayerBones != null)
+			{
+				foreach (var r in player.PlayerBones.GetComponentsInChildren<Rigidbody>())
+				{
+					r.velocity = Vector3.zero;
+					r.angularVelocity = Vector3.zero;
 
-            float baseFOV = _mainPlayer.ProceduralWeaponAnimation.Single_2;
-            float targetFOV = baseFOV;
+					if (active)
+					{
+						r.WakeUp();
+					}
+					else
+					{
+						r.Sleep();
+					}
+				}
+			}
+			
+			var weaponRigidBody = player.HandsController?.ControllerGameObject?.GetComponent<Rigidbody>();
+			if (weaponRigidBody != null)
+			{
+				weaponRigidBody.angularVelocity = Vector3.zero;
+				weaponRigidBody.velocity = Vector3.zero;
+				weaponRigidBody.Sleep();
+			}
 
-            var firearmAnimationData = _firearmAnimationDataField.GetValue(_mainPlayer.ProceduralWeaponAnimation) as GInterface139;
-            var isAiming = (bool)_isAimingField.GetValue(_mainPlayer.ProceduralWeaponAnimation);
+			if (!active)
+			{
+				player.AIData.BotOwner.DecisionQueue.Clear();
+				player.gameObject.SetActive(false);
+			}
+			else
+			{
+				player.gameObject.SetActive(true);
+				player.AIData.BotOwner.CalcGoal();
+			}
+		}
 
-            if (_mainPlayer.ProceduralWeaponAnimation.PointOfView == EPointOfView.FirstPerson && firearmAnimationData != null)
-            {
-                if (_mainPlayer.ProceduralWeaponAnimation.AimIndex < _mainPlayer.ProceduralWeaponAnimation.ScopeAimTransforms.Count && !firearmAnimationData.MouseLookControl)
-                {
-                    if (isAiming)
-                    {
-                        targetFOV = _mainPlayer.ProceduralWeaponAnimation.CurrentScope.IsOptic ? 35f : (baseFOV - 15f);
-                    }
+		/// <summary>
+		/// Shows timer.
+		/// </summary>
+		private void ShowTimer()
+		{
+			_mainTimerPanel?.DisplayTimer();
+		}
 
-                    // Log what the current FOV is 
+		/// <summary>
+		/// Hides timer.
+		/// </summary>
+		/// <returns> Currently processed timer panel. </returns>
+		private IEnumerator CoHideTimer()
+		{
+			if (_mainTimerPanel == null)
+			{
+				yield break;
+			}
+
+			yield return new WaitForSeconds(4f);
+			_mainTimerPanel.HideTimer();
+		}
+
+		/// <summary>
+		/// Returns time spent in paused state.
+		/// </summary>
+		/// <returns> Time spent in paused state. </returns>
+		private TimeSpan GetTimePaused()
+		{
+			return _pausedDate.HasValue && _unpausedDate.HasValue
+				? _unpausedDate.Value - _pausedDate.Value
+				: TimeSpan.Zero;
+		}
+
+		/// <summary>
+		/// Updates timers.
+		/// </summary>
+		/// <param name="timePaused"> Time spent in paused state. </param>
+		private void UpdateTimers(TimeSpan timePaused)
+		{
+			var startDate = StartTimeField.GetValue(_gameTimerClass) as DateTime?;
+			var escapeDate = TimerPanelField.GetValue(_mainTimerPanel) as DateTime?;
+			var realTimeSinceStartup = (float)(GameDateTimeField.GetValue(GameWorld.GameDateTime) ?? 0);
+
+			if (!startDate.HasValue || !escapeDate.HasValue)
+			{
+				return;
+			}
+
+			StartTimeField.SetValue(_gameTimerClass, startDate.Value.Add(timePaused));
+			EscapeTimeField.SetValue(_gameTimerClass, escapeDate.Value.Add(timePaused));
+			TimerPanelField.SetValue(_mainTimerPanel, escapeDate.Value.Add(timePaused));
+			GameDateTimeField.SetValue(GameWorld.GameDateTime, realTimeSinceStartup + (float)timePaused.TotalSeconds);
+		}
+
+		/// <summary>
+		/// Resets field of view.
+		/// </summary>
+		private static void ResetFov()
+		{
+			if (MainPlayer == null || MainPlayer.ProceduralWeaponAnimation == null)
+			{
+				return;
+			}
+			
+			var baseFov = MainPlayer.ProceduralWeaponAnimation.Single_2;
+			var targetFov = baseFov;
+
+			var firearmAnimationData = FirearmAnimationDataField.GetValue(MainPlayer.ProceduralWeaponAnimation) as Player;
+			var isAiming = (bool)IsAimingField.GetValue(MainPlayer.ProceduralWeaponAnimation);
+
+			if (MainPlayer.ProceduralWeaponAnimation.PointOfView != EPointOfView.FirstPerson
+				|| firearmAnimationData == null
+				|| firearmAnimationData.MouseLookControl
+				|| MainPlayer.ProceduralWeaponAnimation.AimIndex >= MainPlayer.ProceduralWeaponAnimation.ScopeAimTransforms.Count)
+			{
+				return;
+			}
+
+			if (isAiming)
+			{
+				targetFov = MainPlayer.ProceduralWeaponAnimation.CurrentScope.IsOptic
+					? 35f
+					: baseFov - 15f;
+			}
+
 #if DEBUG
-            Logger.LogWarning($"Current FOV (When Unpausing): {CameraClass.Instance.Fov} Base FOV: {baseFOV} Target FOV: {targetFOV}");
+			Logger.LogInfo($"Current FOV (When Unpausing): {CameraClass.Instance.Fov} Base FOV: {baseFov} Target FOV: {targetFov}");
 #endif
-                    CameraClass.Instance.SetFov(targetFOV, 1f, !isAiming);
-                }
-            }
-        }
+			CameraClass.Instance.SetFov(targetFov, 1f, !isAiming);
+		}
 
-        private void OnDestroy()
-        {
-            IsPaused = false;
-            _gameWorld = null;
-            _mainPlayer = null;
-            Logger = null;
-            _pausedAudioSources.Clear();
-            _mouseLookControlField = null;
-            _startTimeField = null;
-            _escapeTimeField = null;
-            _timerPanelField = null;
-            _gameDateTimeField = null;
-        }
+		/// <summary>
+		/// Enables mod.
+		/// </summary>
+		internal static void Enable()
+		{
+			if (!Singleton<IBotGame>.Instantiated)
+			{
+				return;
+			}
 
-        internal static void Enable()
-        {
-            if (Singleton<IBotGame>.Instantiated)
-            {
-                _gameWorld = Singleton<GameWorld>.Instance;
-                _gameWorld.GetOrAddComponent<PauseController>();
-                _mainPlayer = _gameWorld.MainPlayer;
-                Logger.LogDebug("PauseController enabled.");
-            }
-        }
+			GameWorld = Singleton<GameWorld>.Instance;
+			GameWorld.GetOrAddComponent<PauseController>();
+			MainPlayer = GameWorld.MainPlayer;
+			Logger.LogDebug("PauseController enabled.");
+		}
 
-        internal static bool IsKeyPressed(KeyboardShortcut key)
-        {
-            if (!UnityInput.Current.GetKeyDown(key.MainKey)) return false;
-            return key.Modifiers.All(modifier => UnityInput.Current.GetKey(modifier));
-        }
-
-        internal static bool IsKeyPressed(KeyCode key) => UnityInput.Current.GetKeyDown(key);
-    }
+		/// <summary>
+		/// Processes keyboard shortcut input.
+		/// </summary>
+		/// <param name="key"> Keyboard shortcut. </param>
+		/// <returns> Is key pressed. </returns>
+		internal static bool IsKeyPressed(KeyboardShortcut key)
+		{
+			return UnityInput.Current.GetKeyDown(key.MainKey)
+				&& key.Modifiers.All(modifier => UnityInput.Current.GetKey(modifier));
+		}
+	}
 }
