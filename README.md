@@ -1,6 +1,7 @@
 SPTarkov "Pause" mod.
 
-Forked and updated for 3.10.5.
+Forked and updated for 3.10.5+.
+Tested on both 3.10.5 and 3.11.1.
 
 ## What gets paused
 - You
