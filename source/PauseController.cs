@@ -198,7 +198,11 @@ namespace Pause
 			}
 
 			PauseAllAudio();
-			ShowTimer();
+
+			if (Plugin.IsShowingPausedText.Value)
+			{
+				ShowTimer();
+			}
 		}
 
 		/// <summary>
@@ -219,7 +223,11 @@ namespace Pause
 			}
 
 			ResumeAllAudio();
-			StartCoroutine(CoHideTimer());
+
+			if (Plugin.IsShowingPausedText.Value && !_mainTimerPanel.ForcePull)
+			{
+				StartCoroutine(CoHideTimer());
+			}
 
 			UpdateTimers(GetTimePaused());
 		}
@@ -381,28 +389,30 @@ namespace Pause
 		/// </summary>
 		private static void ResetFov()
 		{
-			if (MainPlayer == null || MainPlayer.ProceduralWeaponAnimation == null)
+			if (MainPlayer == null
+				|| MainPlayer.ProceduralWeaponAnimation == null
+				|| CameraClass.Instance == null)
 			{
 				return;
 			}
 
 			var baseFov = MainPlayer.ProceduralWeaponAnimation.Single_2;
 			var targetFov = baseFov;
-
-			var mouseLookControlPlayer = MouseLookControlField.GetValue(typeof(Player)) as Player;
-			var isAiming = (bool)(IsAimingField.GetValue(MainPlayer.ProceduralWeaponAnimation) ?? false);
+			var mouseLookControlPlayer = MouseLookControlField?.GetValue(typeof(Player)) as Player;
+			var isAiming = (bool)(IsAimingField?.GetValue(MainPlayer.ProceduralWeaponAnimation) ?? false);
+			var scopeAimTransformsCount = MainPlayer.ProceduralWeaponAnimation.ScopeAimTransforms?.Count ?? 0;
 
 			if (MainPlayer.ProceduralWeaponAnimation.PointOfView != EPointOfView.FirstPerson
 				|| mouseLookControlPlayer == null
 				|| mouseLookControlPlayer.MouseLookControl
-				|| MainPlayer.ProceduralWeaponAnimation.AimIndex >= MainPlayer.ProceduralWeaponAnimation.ScopeAimTransforms.Count)
+				|| MainPlayer.ProceduralWeaponAnimation.AimIndex >= scopeAimTransformsCount)
 			{
 				return;
 			}
 
 			if (isAiming)
 			{
-				targetFov = MainPlayer.ProceduralWeaponAnimation.CurrentScope.IsOptic
+				targetFov = MainPlayer.ProceduralWeaponAnimation.CurrentScope?.IsOptic ?? false
 					? 35f
 					: baseFov - 15f;
 			}

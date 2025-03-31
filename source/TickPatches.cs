@@ -3,6 +3,7 @@ using EFT.UI.BattleTimer;
 using HarmonyLib;
 using SPT.Reflection.Patching;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using TMPro;
 
 namespace Pause
@@ -112,7 +113,11 @@ namespace Pause
 				return true;
 			}
 
-			____timerText.SetMonospaceText("PAUSED", false);
+			if (Plugin.IsShowingPausedText.Value)
+			{
+				____timerText.SetMonospaceText("PAUSED", false);
+			}
+
 			return false;
 		}
 	}

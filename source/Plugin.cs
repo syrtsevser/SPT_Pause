@@ -12,13 +12,18 @@ namespace Pause
 	/// <summary>
 	/// Pause game mod.
 	/// </summary>
-	[BepInPlugin("com.dvize.pause", "PAUSE", "1.2.1")]
+	[BepInPlugin("com.dvize.pause", "PAUSE", "1.2.2")]
 	public class Plugin : BaseUnityPlugin
 	{
 		/// <summary>
 		/// Pause game shortcut.
 		/// </summary>
 		internal static ConfigEntry<KeyboardShortcut> TogglePause;
+
+		/// <summary>
+		/// Display "PAUSED" text.
+		/// </summary>
+		internal static ConfigEntry<bool> IsShowingPausedText;
 
 		/// <summary>
 		/// Logger.
@@ -33,6 +38,7 @@ namespace Pause
 		{
 			Log = Logger;
 			TogglePause = Config.Bind("Keybinds", "Toggle Pause", new KeyboardShortcut(KeyCode.F9));
+			IsShowingPausedText = Config.Bind("General", "Show PAUSED text", true);
 			Logger.LogInfo("PAUSE: Loading");
 
 			new NewGamePatch().Enable();
